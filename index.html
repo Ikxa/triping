@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🌷 Amsterdam – Notre Voyage</title>
+  <meta name="description" content="Organise notre voyage à Amsterdam – lieux, restos, bars, culture et bons plans, partagés entre amis.">
+  <meta property="og:title" content="🌷 Amsterdam Trip Planner">
+  <meta property="og:description" content="Notre board collaboratif pour le voyage à Amsterdam">
+  <meta property="og:type" content="website">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;600;700&family=Inter:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ═══════════════════════════════════════════════
+       HEADER
+  ══════════════════════════════════════════════════ -->
+  <header class="header">
+    <div class="header-inner">
+      <div class="header-left">
+        <div class="header-eyebrow">Notre Voyage</div>
+        <h1 class="header-title">
+          <span class="title-tulip">🌷</span>Amsterdam
+        </h1>
+        <p class="header-sub" id="headerSub">Le board collaboratif du voyage</p>
+      </div>
+      <div class="header-widgets">
+        <div class="widget" id="countdownWidget">
+          <span class="widget-icon">✈️</span>
+          <div class="widget-text">
+            <span class="widget-label">Départ dans</span>
+            <span class="widget-val" id="countdownVal">—</span>
+          </div>
+        </div>
+        <div class="widget" id="weatherWidget">
+          <span class="widget-icon" id="weatherIcon">🌡️</span>
+          <div class="widget-text">
+            <span class="widget-label">Amsterdam</span>
+            <span class="widget-val" id="weatherVal">…</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="header-wave">
+      <svg viewBox="0 0 1440 48" preserveAspectRatio="none"><path d="M0,48 C360,0 1080,48 1440,12 L1440,48 Z" fill="var(--bg-board)"/></svg>
+    </div>
+  </header>
+
+  <!-- ═══════════════════════════════════════════════
+       CONTROLS BAR
+  ══════════════════════════════════════════════════ -->
+  <div class="controls-bar">
+    <div class="controls-inner">
+
+      <!-- Search -->
+      <label class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="searchInput" placeholder="Rechercher…" autocomplete="off">
+      </label>
+
+      <!-- Category pills -->
+      <div class="pill-group" id="categoryFilters" role="group" aria-label="Filtrer par catégorie">
+        <button class="pill active" data-cat="all">Tous</button>
+        <button class="pill pill-bar"      data-cat="bar">🍺 Bars</button>
+        <button class="pill pill-resto"    data-cat="resto">🍽️ Restos</button>
+        <button class="pill pill-culture"  data-cat="culture">🏛️ Culture</button>
+        <button class="pill pill-nature"   data-cat="nature">🌿 Nature</button>
+        <button class="pill pill-shopping" data-cat="shopping">🛍️ Shopping</button>
+        <button class="pill pill-music"    data-cat="music">🎵 Nightlife</button>
+        <button class="pill pill-other"    data-cat="other">💡 Autre</button>
+      </div>
+
+      <!-- Status + Sort row -->
+      <div class="controls-row2">
+        <div class="pill-group" id="statusFilters" role="group" aria-label="Filtrer par statut">
+          <button class="pill active" data-status="all">Tout</button>
+          <button class="pill" data-status="todo">📌 À faire</button>
+          <button class="pill" data-status="done">✅ Visité</button>
+          <button class="pill" data-status="skip">⏭️ Skip</button>
+        </div>
+
+        <div class="sort-wrap">
+          <label for="sortSelect" class="sort-label">Trier :</label>
+          <select id="sortSelect" class="sort-select">
+            <option value="date-desc">🕐 Plus récent</option>
+            <option value="date-asc">🕐 Plus ancien</option>
+            <option value="votes-desc">❤️ Populaire</option>
+            <option value="alpha">🔤 A → Z</option>
+            <option value="budget-asc">💶 Budget €→€€€</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════
+       STATS BAR
+  ══════════════════════════════════════════════════ -->
+  <div class="stats-bar" id="statsBar">
+    <span id="statCount">0 lieu</span>
+    <span class="stat-sep">·</span>
+    <span id="statDone">0 visité</span>
+    <span class="stat-sep">·</span>
+    <span id="statVotes">0 votes</span>
+    <span class="stat-sep stat-sep-right">·</span>
+    <span id="lastSync" class="last-sync">—</span>
+    <button class="refresh-btn" id="refreshBtn" title="Rafraîchir">↻</button>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════
+       MAIN BOARD
+  ══════════════════════════════════════════════════ -->
+  <main class="board-wrap">
+    <div class="board" id="board"></div>
+
+    <div class="empty-state" id="emptyState">
+      <div class="empty-icon">🗺️</div>
+      <p class="empty-title">Le board est vide !</p>
+      <p class="empty-sub">Soyez les premiers à ajouter un endroit à visiter à Amsterdam 🌷</p>
+      <button class="btn-primary" onclick="openAddModal()">+ Ajouter le premier lieu</button>
+    </div>
+  </main>
+
+  <!-- ═══════════════════════════════════════════════
+       FAB
+  ══════════════════════════════════════════════════ -->
+  <button class="fab" id="fabBtn" aria-label="Ajouter un lieu" title="Ajouter un lieu">
+    <span class="fab-icon">+</span>
+    <span class="fab-label">Ajouter</span>
+  </button>
+
+  <!-- ═══════════════════════════════════════════════
+       MODAL : ADD / EDIT
+  ══════════════════════════════════════════════════ -->
+  <div class="overlay" id="formOverlay" role="dialog" aria-modal="true" aria-labelledby="formTitle">
+    <div class="modal modal-form">
+      <div class="modal-header">
+        <h2 class="modal-title" id="formTitle">📌 Nouveau lieu</h2>
+        <button class="modal-close" id="formClose" aria-label="Fermer">✕</button>
+      </div>
+      <form id="itemForm" class="form" autocomplete="off">
+        <input type="hidden" id="fieldId">
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="fieldAuthor">🙋 Ton prénom *</label>
+            <input type="text" id="fieldAuthor" placeholder="Jordan" required maxlength="30">
+          </div>
+          <div class="form-group">
+            <label for="fieldCategory">📂 Catégorie *</label>
+            <select id="fieldCategory" required>
+              <option value="">— Choisir —</option>
+              <option value="bar">🍺 Bar</option>
+              <option value="resto">🍽️ Restaurant</option>
+              <option value="culture">🏛️ Culture / Musée</option>
+              <option value="nature">🌿 Nature / Parc</option>
+              <option value="shopping">🛍️ Shopping</option>
+              <option value="music">🎵 Musique / Nightlife</option>
+              <option value="other">💡 Autre</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="fieldTitle">📍 Nom du lieu *</label>
+          <input type="text" id="fieldTitle" placeholder="ex: Rijksmuseum, Paradiso, Bokashi…" required maxlength="80">
+        </div>
+
+        <div class="form-group">
+          <label for="fieldDesc">📝 Description</label>
+          <textarea id="fieldDesc" rows="3" placeholder="Pourquoi y aller, ambiance, ce qu'il faut voir…" maxlength="500"></textarea>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="fieldAddress">📌 Adresse</label>
+            <input type="text" id="fieldAddress" placeholder="Museumstraat 1, Amsterdam" maxlength="100">
+          </div>
+          <div class="form-group">
+            <label for="fieldBudget">💶 Budget</label>
+            <select id="fieldBudget">
+              <option value="">—</option>
+              <option value="free">🆓 Gratuit</option>
+              <option value="low">€ Pas cher</option>
+              <option value="mid">€€ Moyen</option>
+              <option value="high">€€€ Cher</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>🖼️ Photo</label>
+          <div class="photo-input-wrap">
+            <label class="photo-upload-btn" for="fieldPhotoFile">
+              <span class="photo-upload-icon">📁</span>
+              <span id="photoFileLabel">Choisir un fichier…</span>
+              <input type="file" id="fieldPhotoFile" accept="image/*" style="display:none">
+            </label>
+            <div class="photo-or">ou</div>
+            <input type="url" id="fieldPhotoUrl" placeholder="https://… (URL d'image)" class="photo-url-input">
+          </div>
+          <div id="photoPreview" class="photo-preview" style="display:none">
+            <img id="photoPreviewImg" src="" alt="Aperçu">
+            <button type="button" class="photo-clear-btn" id="photoClear" title="Supprimer la photo">✕</button>
+          </div>
+          <div class="field-hint">Upload une photo ou colle une URL (Unsplash, Google Photos…)</div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="fieldWebsite">🔗 Site web</label>
+            <input type="url" id="fieldWebsite" placeholder="https://…">
+          </div>
+          <div class="form-group">
+            <label for="fieldInstagram">📸 Instagram</label>
+            <input type="text" id="fieldInstagram" placeholder="@nom_du_lieu">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="fieldTips">💬 Tips & bons plans</label>
+          <textarea id="fieldTips" rows="2" placeholder="Réserver à l'avance, venir le matin, menu du midi dispo, cash only…" maxlength="300"></textarea>
+        </div>
+
+        <div class="form-actions">
+          <button type="button" class="btn-ghost" id="formCancel">Annuler</button>
+          <button type="submit" class="btn-primary" id="formSubmit">Ajouter 📌</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════
+       MODAL : DETAIL VIEW
+  ══════════════════════════════════════════════════ -->
+  <div class="overlay" id="detailOverlay" role="dialog" aria-modal="true">
+    <div class="modal modal-detail">
+      <button class="modal-close detail-close" id="detailClose" aria-label="Fermer">✕</button>
+      <div id="detailContent"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════
+       MODAL : CONFIRM DELETE
+  ══════════════════════════════════════════════════ -->
+  <div class="overlay" id="confirmOverlay" role="dialog" aria-modal="true">
+    <div class="modal modal-confirm">
+      <div class="confirm-icon">🗑️</div>
+      <p class="confirm-msg">Supprimer ce lieu ?</p>
+      <p class="confirm-sub">Cette action est irréversible.</p>
+      <div class="form-actions">
+        <button class="btn-ghost" id="confirmCancel">Annuler</button>
+        <button class="btn-danger" id="confirmOk">Supprimer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════
+       MODAL : REJOINDRE LE BOARD (token GitHub)
+  ══════════════════════════════════════════════════ -->
+  <div class="overlay" id="tokenOverlay" role="dialog" aria-modal="true" aria-labelledby="tokenTitle">
+    <div class="modal modal-confirm" style="max-width:460px">
+      <div class="confirm-icon">🔑</div>
+      <h2 class="modal-title" id="tokenTitle" style="text-align:center;margin-bottom:4px">Rejoindre le board</h2>
+      <p class="confirm-sub" style="text-align:center;margin-bottom:20px">
+        Entre le token GitHub (fourni par Jordan) pour pouvoir ajouter et modifier des lieux.
+      </p>
+      <div class="form-group" style="margin-bottom:8px">
+        <label for="tokenInput">🔑 GitHub Token</label>
+        <input type="password" id="tokenInput" placeholder="ghp_xxxxxxxxxxxxxxxx"
+               autocomplete="off" style="font-family:monospace;letter-spacing:.05em">
+        <div class="field-hint">Token avec scope "gist" uniquement — ne donne accès à rien d'autre.</div>
+      </div>
+      <div class="form-actions" style="flex-direction:column;gap:8px">
+        <button class="btn-primary" id="tokenSave" style="width:100%">Rejoindre ✓</button>
+        <button class="btn-ghost"   id="tokenSkip" style="width:100%">Mode lecture seule</button>
+      </div>
+      <p id="tokenError" style="color:#c8102e;font-size:12px;text-align:center;margin-top:8px;display:none"></p>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════
+       TOAST NOTIFICATIONS
+  ══════════════════════════════════════════════════ -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- ═══════════════════════════════════════════════
+       SYNC INDICATOR
+  ══════════════════════════════════════════════════ -->
+  <div class="sync-indicator" id="syncIndicator" title="Cliquer pour changer de token" style="cursor:pointer"></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
