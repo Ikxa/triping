@@ -126,6 +126,10 @@ async function initStorage() {
     refreshTimer = setInterval(refresh, AUTO_REFRESH);
   } catch (err) {
     console.warn('[Amsterdam] GitHub Gist error, falling back to localStorage:', err);
+    if (err.message.includes('Bad credentials') || err.message.includes('401')) {
+      localStorage.removeItem(TOKEN_KEY);
+      openTokenModal();
+    }
     loadLocal();
     showSyncBadge('local');
     toast(`⚠️ Gist inaccessible (${err.message}) — mode local activé`, 'default', 5000);
@@ -890,7 +894,7 @@ function setupEvents() {
   });
   // Sync badge click → re-open token modal
   document.getElementById('syncIndicator').addEventListener('click', () => {
-    if (useCloud) openTokenModal();
+    openTokenModal();
   });
 
   // Escape
