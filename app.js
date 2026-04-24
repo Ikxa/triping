@@ -15,7 +15,7 @@ const VOTED_KEY    = 'amsterdam-voted-v1';
 const TOKEN_KEY    = 'amsterdam-gist-token'; // GitHub PAT stored locally per user
 const GIST_FILE    = 'data.json';
 const GIST_URL     = `https://api.github.com/gists/${GIST_ID}`;
-const AUTO_REFRESH = 45_000;
+const AUTO_REFRESH = 180_000; // 3 minutes pour économiser le quota (5000 req/h)
 
 // PAT helpers — stored in localStorage, never in source code
 function getToken() { return localStorage.getItem(TOKEN_KEY) || ''; }
@@ -60,13 +60,16 @@ function isCloudConfigured() {
   return GIST_ID && !GIST_ID.startsWith(PLACEHOLDER);
 }
 
-// Read — works without auth on a public gist
+// Read — uses auth if available to get 5000 req/hr limit instead of 60
 async function cloudGet() {
-  const res = await fetch(GIST_URL, {
-    headers: { 'Accept': 'application/vnd.github+json' },
-  });
+  const token = getToken();
+  const headers = { 'Accept': 'application/vnd.github+json' };
+  if (token) headers['Authorization'] = `token ${token}`;
+
+  const res = await fetch(GIST_URL, { headers });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
+    if (res.status === 403 || res.status === 429) throw new Error('Quota API dépassé. Reviens plus tard.');
     throw new Error(body.message || `GitHub Gist GET ${res.status}`);
   }
   const gist = await res.json();
