@@ -914,6 +914,11 @@ function openShowcase(id) {
   showcaseIdx = 0;
   generateShowcaseContent(item);
   renderShowcaseSlides();
+  
+  // Forcer le reflow du navigateur pour s'assurer que les animations CSS
+  // repartent bien de zéro quand on ouvre une nouvelle présentation !
+  void document.getElementById('showcaseSlides').offsetHeight;
+  
   updateShowcaseState();
   openOverlay('showcaseOverlay');
 }
@@ -963,8 +968,9 @@ function generateShowcaseContent(item) {
 
 function renderShowcaseSlides() {
   const container = document.getElementById('showcaseSlides');
-  container.innerHTML = showcaseData.map((s, i) => `
-    <div class="showcase-slide ${i === 0 ? 'active' : ''}">
+  // On ne met pas la classe 'active' ici, l'update d'état s'en chargera après le reflow
+  container.innerHTML = showcaseData.map((s) => `
+    <div class="showcase-slide">
       <h2 class="showcase-title">${s.title}</h2>
       <p class="showcase-content">${s.content}</p>
     </div>
@@ -986,6 +992,8 @@ function nextSlide() {
     updateShowcaseState();
   } else {
     closeOverlay('showcaseOverlay');
+    // Réinitialisation de sécurité pour ne pas casser le DOM s'il y a un décalage
+    setTimeout(() => { showcaseIdx = 0; updateShowcaseState(); }, 300);
   }
 }
 
