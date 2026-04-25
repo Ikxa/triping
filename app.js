@@ -297,7 +297,6 @@ function renderAll() {
   }
   empty.classList.remove('visible');
   board.innerHTML = data.map((item, idx) => renderCard(item, idx, voted)).join('');
-  attachCardEvents();
 }
 
 function renderCard(item, idx, voted) {
@@ -393,19 +392,8 @@ function renderCard(item, idx, voted) {
 </article>`;
 }
 
-function attachCardEvents() {
-  // Detach old listener by replacing the board with a clone
-  const board = document.getElementById('board');
-  const clone = board.cloneNode(true);
-  board.parentNode.replaceChild(clone, board);
-
-  clone.addEventListener('click', handleCardClick);
-  clone.addEventListener('keydown', e => {
-    if ((e.key === 'Enter' || e.key === ' ') && e.target === e.target.closest('.card'))
-      openDetail(e.target.closest('.card').dataset.id);
-  });
-}
-
+// L'attachement se fait désormais au démarrage via délégation (plus performant)
+// function attachCardEvents() { ... }
 function handleCardClick(e) {
   const action = e.target.closest('[data-action]')?.dataset.action;
   const card   = e.target.closest('.card');
@@ -731,6 +719,16 @@ function escHtml(str) {
 // EVENTS
 // ──────────────────────────────────────────────────────────────
 function setupEvents() {
+  // Board delegation
+  const board = document.getElementById('board');
+  board.addEventListener('click', handleCardClick);
+  board.addEventListener('keydown', e => {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target === e.target.closest('.card')) {
+      e.preventDefault(); // prevent scrolling on space
+      openDetail(e.target.closest('.card').dataset.id);
+    }
+  });
+
   // FAB
   document.getElementById('fabBtn').addEventListener('click', openAddModal);
 
