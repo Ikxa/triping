@@ -915,12 +915,14 @@ function openShowcase(id) {
   generateShowcaseContent(item);
   renderShowcaseSlides();
   
-  // Forcer le reflow du navigateur pour s'assurer que les animations CSS
-  // repartent bien de zéro quand on ouvre une nouvelle présentation !
-  void document.getElementById('showcaseSlides').offsetHeight;
-  
-  updateShowcaseState();
-  openOverlay('showcaseOverlay');
+  // Utilisation de la méthode la plus robuste (double rAF) pour contourner
+  // le moteur d'optimisation (qui provoque le bug sur certains appareils/navigateurs)
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      updateShowcaseState();
+      openOverlay('showcaseOverlay');
+    });
+  });
 }
 
 function generateShowcaseContent(item) {
