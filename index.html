@@ -260,26 +260,19 @@
   </div>
 
   <!-- ═══════════════════════════════════════════════
-       MODAL : REJOINDRE LE BOARD (token GitHub)
+       MODAL : RIDICULOUS SHOWCASE
   ══════════════════════════════════════════════════ -->
-  <div class="overlay" id="tokenOverlay" role="dialog" aria-modal="true" aria-labelledby="tokenTitle">
-    <div class="modal modal-confirm" style="max-width:460px">
-      <div class="confirm-icon">🔑</div>
-      <h2 class="modal-title" id="tokenTitle" style="text-align:center;margin-bottom:4px">Rejoindre le board</h2>
-      <p class="confirm-sub" style="text-align:center;margin-bottom:20px">
-        Entre le token GitHub (fourni par Jordan) pour pouvoir ajouter et modifier des lieux.
-      </p>
-      <div class="form-group" style="margin-bottom:8px">
-        <label for="tokenInput">🔑 GitHub Token</label>
-        <input type="password" id="tokenInput" placeholder="ghp_xxxxxxxxxxxxxxxx"
-               autocomplete="off" style="font-family:monospace;letter-spacing:.05em">
-        <div class="field-hint">Token avec scope "gist" uniquement — ne donne accès à rien d'autre.</div>
+  <div class="overlay" id="showcaseOverlay" role="dialog" aria-modal="true">
+    <div class="showcase-container">
+      <button class="showcase-close" id="showcaseClose">✕</button>
+      <div id="showcaseSlides" class="showcase-slides">
+        <!-- Slides dynamically generated here -->
       </div>
-      <div class="form-actions" style="flex-direction:column;gap:8px">
-        <button class="btn-primary" id="tokenSave" style="width:100%">Rejoindre ✓</button>
-        <button class="btn-ghost"   id="tokenSkip" style="width:100%">Mode lecture seule</button>
+      <div class="showcase-nav">
+        <button id="showcasePrev" class="showcase-btn">Précédent</button>
+        <span id="showcaseProgress">1 / 5</span>
+        <button id="showcaseNext" class="showcase-btn">Suivant ! 🚀</button>
       </div>
-      <p id="tokenError" style="color:#c8102e;font-size:12px;text-align:center;margin-top:8px;display:none"></p>
     </div>
   </div>
 
@@ -291,7 +284,7 @@
   <!-- ═══════════════════════════════════════════════
        SYNC INDICATOR
   ══════════════════════════════════════════════════ -->
-  <div class="sync-indicator" id="syncIndicator" title="Cliquer pour changer de token" style="cursor:pointer"></div>
+  <div class="sync-indicator" id="syncIndicator" title="Mode de synchronisation"></div>
 
   <script type="module" src="app.js"></script>
 </body>

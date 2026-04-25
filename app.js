@@ -4,7 +4,7 @@
 // ║     Photos: ImgBB (cloud) + base64 Canvas (fallback)        ║
 // ╚══════════════════════════════════════════════════════════════╝
 
-import { TRIP_DATE, GIST_ID, IMGBB_API_KEY } from './config.js';
+import { TRIP_DATE, GIST_ID, GITHUB_PAT, IMGBB_API_KEY } from './config.js';
 
 // ──────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -12,14 +12,9 @@ import { TRIP_DATE, GIST_ID, IMGBB_API_KEY } from './config.js';
 const PLACEHOLDER  = 'YOUR_';
 const STORAGE_KEY  = 'amsterdam-trip-v1';
 const VOTED_KEY    = 'amsterdam-voted-v1';
-const TOKEN_KEY    = 'amsterdam-gist-token'; // GitHub PAT stored locally per user
 const GIST_FILE    = 'data.json';
 const GIST_URL     = `https://api.github.com/gists/${GIST_ID}`;
-const AUTO_REFRESH = 180_000; // 3 minutes pour économiser le quota (5000 req/h)
-
-// PAT helpers — stored in localStorage, never in source code
-function getToken() { return localStorage.getItem(TOKEN_KEY) || ''; }
-function setToken(t) { localStorage.setItem(TOKEN_KEY, t.trim()); }
+const AUTO_REFRESH = 45_000;
 
 const CATEGORIES = {
   bar:      { emoji: '🍺', label: 'Bar',        color: '#E8A838' },
@@ -57,19 +52,19 @@ let filter = { cat: 'all', status: 'all', search: '', sort: 'date-desc' };
 // GITHUB GIST API
 // ──────────────────────────────────────────────────────────────
 function isCloudConfigured() {
-  return GIST_ID && !GIST_ID.startsWith(PLACEHOLDER);
+  return (
+    GIST_ID    && !GIST_ID.startsWith(PLACEHOLDER) &&
+    GITHUB_PAT && !GITHUB_PAT.startsWith(PLACEHOLDER)
+  );
 }
 
-// Read — uses auth if available to get 5000 req/hr limit instead of 60
+// Read — works without auth on a public gist
 async function cloudGet() {
-  const token = getToken();
-  const headers = { 'Accept': 'application/vnd.github+json' };
-  if (token) headers['Authorization'] = `token ${token}`;
-
-  const res = await fetch(GIST_URL, { headers });
+  const res = await fetch(GIST_URL, {
+    headers: { 'Accept': 'application/vnd.github+json' },
+  });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    if (res.status === 403 || res.status === 429) throw new Error('Quota API dépassé. Reviens plus tard.');
     throw new Error(body.message || `GitHub Gist GET ${res.status}`);
   }
   const gist = await res.json();
@@ -78,15 +73,13 @@ async function cloudGet() {
   return Array.isArray(data.items) ? data.items : [];
 }
 
-// Write — requires PAT with gist scope (stored in localStorage)
+// Write — requires PAT with gist scope
 async function cloudPut(data) {
-  const token = getToken();
-  if (!token) throw new Error('no-token');
   const res = await fetch(GIST_URL, {
     method:  'PATCH',
     headers: {
       'Accept':        'application/vnd.github+json',
-      'Authorization': `token ${token}`,
+      'Authorization': `token ${GITHUB_PAT}`,
       'Content-Type':  'application/json',
     },
     body: JSON.stringify({
@@ -115,21 +108,12 @@ async function initStorage() {
     items = Array.isArray(data) ? data : [];
     useCloud = true;
     renderAll();
-    // Show token modal if no PAT stored yet
-    if (!getToken()) {
-      openTokenModal();
-      showSyncBadge('readonly');
-    } else {
-      showSyncBadge('cloud');
-    }
+    showSyncBadge('cloud');
     updateLastSync();
+    // Auto-refresh
     refreshTimer = setInterval(refresh, AUTO_REFRESH);
   } catch (err) {
     console.warn('[Amsterdam] GitHub Gist error, falling back to localStorage:', err);
-    if (err.message.includes('Bad credentials') || err.message.includes('401')) {
-      localStorage.removeItem(TOKEN_KEY);
-      openTokenModal();
-    }
     loadLocal();
     showSyncBadge('local');
     toast(`⚠️ Gist inaccessible (${err.message}) — mode local activé`, 'default', 5000);
@@ -360,6 +344,12 @@ function renderCard(item, idx, voted) {
   </div>
 
   <div class="card-actions">
+    <button class="magic-btn"
+            data-action="showcase"
+            title="Showcase ridicule ! ✨">
+      ✨
+    </button>
+
     <button class="vote-btn ${isVot ? 'voted' : ''}"
             data-action="vote"
             title="${isVot ? 'Retirer mon vote' : "J'y vais !"}">
@@ -409,10 +399,11 @@ function handleCardClick(e) {
   if (!card) return;
   const id = card.dataset.id;
 
-  if (action === 'vote')   { e.stopPropagation(); voteItem(id);    return; }
-  if (action === 'status') { e.stopPropagation(); cycleStatus(id); return; }
-  if (action === 'edit')   { e.stopPropagation(); openEditModal(id); return; }
-  if (action === 'delete') { e.stopPropagation(); openConfirm(id); return; }
+  if (action === 'vote')     { e.stopPropagation(); voteItem(id);      return; }
+  if (action === 'showcase') { e.stopPropagation(); openShowcase(id);   return; }
+  if (action === 'status')   { e.stopPropagation(); cycleStatus(id);   return; }
+  if (action === 'edit')     { e.stopPropagation(); openEditModal(id); return; }
+  if (action === 'delete')   { e.stopPropagation(); openConfirm(id);   return; }
 
   if (!e.target.closest('.card-actions')) openDetail(id);
 }
@@ -541,42 +532,6 @@ function openOverlay(id)  { document.getElementById(id).classList.add('open'); }
 function closeOverlay(id) { document.getElementById(id).classList.remove('open'); }
 
 // ──────────────────────────────────────────────────────────────
-// MODAL : TOKEN (Rejoindre le board)
-// ──────────────────────────────────────────────────────────────
-function openTokenModal() {
-  document.getElementById('tokenInput').value = getToken();
-  document.getElementById('tokenError').style.display = 'none';
-  openOverlay('tokenOverlay');
-}
-
-async function saveToken() {
-  const val = document.getElementById('tokenInput').value.trim();
-  const err = document.getElementById('tokenError');
-  if (!val) { err.textContent = 'Entre un token valide.'; err.style.display = 'block'; return; }
-
-  // Quick validation — test a write to the gist
-  const btn = document.getElementById('tokenSave');
-  btn.disabled = true; btn.textContent = 'Vérification…';
-  try {
-    // Read current data first, then write it back with the new token
-    setToken(val);
-    const fresh = await cloudGet();
-    await cloudPut(fresh); // no-op write just to test auth
-    closeOverlay('tokenOverlay');
-    showSyncBadge('cloud');
-    toast('✅ Token valide — tu peux écrire sur le board !', 'success', 3000);
-  } catch (e) {
-    localStorage.removeItem(TOKEN_KEY); // clear bad token
-    err.textContent = e.message.includes('Bad credentials') || e.message.includes('401')
-      ? 'Token incorrect ou expiré. Vérifie et réessaie.'
-      : `Erreur : ${e.message}`;
-    err.style.display = 'block';
-  } finally {
-    btn.disabled = false; btn.textContent = 'Rejoindre ✓';
-  }
-}
-
-// ──────────────────────────────────────────────────────────────
 // PHOTO HANDLING — ImgBB + Canvas fallback
 // ──────────────────────────────────────────────────────────────
 function isImgBBConfigured() {
@@ -695,17 +650,8 @@ function setSyncBadge(state) {
 function showSyncBadge(mode) {
   const el = document.getElementById('syncIndicator');
   el.classList.add('show');
-  el.className = 'sync-indicator show';
-  if (mode === 'cloud') {
-    el.textContent = '🐙 Gist sync ✓';
-    el.classList.add('mode-firebase');
-  } else if (mode === 'readonly') {
-    el.textContent = '👁️ Lecture seule — cliquer pour rejoindre';
-    el.classList.add('mode-local');
-  } else {
-    el.textContent = '💾 Mode local';
-    el.classList.add('mode-local');
-  }
+  if (mode === 'cloud') { el.textContent = '🐙 GitHub Gist sync'; el.classList.add('mode-firebase'); }
+  else                  { el.textContent = '💾 Mode local';    el.classList.add('mode-local');   }
 }
 
 function updateLastSync() {
@@ -789,13 +735,7 @@ function setupEvents() {
       else           { await addItem(data);               toast('📌 Lieu ajouté !', 'success'); }
       closeOverlay('formOverlay');
     } catch (err) {
-      if (err.message === 'no-token') {
-        closeOverlay('formOverlay');
-        openTokenModal();
-        toast('🔑 Entre ton token pour écrire sur le board', 'default', 4000);
-      } else {
-        toast('❌ ' + err.message, 'error');
-      }
+      toast('❌ ' + err.message, 'error');
     } finally {
       btn.disabled = false;
       btn.textContent = editingId ? 'Enregistrer ✓' : 'Ajouter 📌';
@@ -883,26 +823,117 @@ function setupEvents() {
     searchTimer = setTimeout(() => { filter.search = e.target.value.trim(); renderAll(); }, 220);
   });
 
-  // Token modal
-  document.getElementById('tokenSave').addEventListener('click', saveToken);
-  document.getElementById('tokenSkip').addEventListener('click', () => {
-    closeOverlay('tokenOverlay');
-    showSyncBadge('readonly');
-  });
-  document.getElementById('tokenInput').addEventListener('keydown', e => {
-    if (e.key === 'Enter') saveToken();
-  });
-  // Sync badge click → re-open token modal
-  document.getElementById('syncIndicator').addEventListener('click', () => {
-    openTokenModal();
-  });
-
   // Escape
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
-    ['formOverlay', 'detailOverlay', 'confirmOverlay', 'tokenOverlay'].forEach(id => {
+    ['formOverlay', 'detailOverlay', 'confirmOverlay', 'showcaseOverlay'].forEach(id => {
       if (document.getElementById(id).classList.contains('open')) closeOverlay(id);
     });
+  });
+}
+
+// ──────────────────────────────────────────────────────────────
+// RIDICULOUS SHOWCASE LOGIC
+// ──────────────────────────────────────────────────────────────
+let showcaseIdx = 0;
+let showcaseData = [];
+
+function openShowcase(id) {
+  const item = items.find(i => i.id === id);
+  if (!item) return;
+
+  showcaseIdx = 0;
+  generateShowcaseContent(item);
+  renderShowcaseSlides();
+  updateShowcaseState();
+  openOverlay('showcaseOverlay');
+}
+
+function generateShowcaseContent(item) {
+  const funnyReasons = [
+    'Parce que si tu n\'y vas pas, les tulipes vont pleurer.',
+    'Pour voir la puissance brute de l\'ingénierie néerlandaise.',
+    'Parce que je l\'ai dit, et je suis un assistant IA surpuissant.',
+    'Pour trouver la chambre forte secrète où ils cachent le rab de fromage.',
+    'C\'est légalement obligatoire pour les touristes de qualité.',
+    'Pour flexer sur tes potes qui travaillent pendant que tu kiffes.',
+    'Parce que la gravité y est 2% plus faible (source: tqt).',
+    'Y\'a une promo pour ceux qui arrivent à dire "Amsterdam" avec un accent naze.'
+  ];
+
+  const funnyNegatives = [
+    'Trop de fun peut causer une combustion spontanée de joie.',
+    'Le niveau de "cool" est dangereusement élevé (ramène une veste).',
+    'Tu risques de ne plus jamais vouloir rentrer, ce qui est chiant pour le loyer.',
+    'Tes followers Instagram vont littéralement décéder de jalousie.',
+    'Les locaux risquent de te demander de devenir leur nouveau Roi/Reine.'
+  ];
+
+  const categories = {
+    bar: 'La picole de qualité supérieure',
+    resto: 'La gastronomie qui rend fort',
+    culture: 'Le savoir ancestral et les vieux trucs',
+    nature: 'Le gazon maudit de la paix',
+    shopping: 'Le capitalisme en roue libre',
+    music: 'Le bruit qui fait bouger les épaules',
+    other: 'Le truc mystère du voyage'
+  };
+
+  const choice1 = funnyReasons[Math.floor(Math.random() * funnyReasons.length)];
+  const choice2 = funnyNegatives[Math.floor(Math.random() * funnyNegatives.length)];
+  const catDesc = categories[item.category] || categories.other;
+
+  showcaseData = [
+    { title: 'ALERTE INFO', content: `Préparez-vous pour... <br><strong>${item.title.toUpperCase()}</strong>` },
+    { title: 'C\'EST QUOI ?', content: `Il paraît que c'est : <br><em>${catDesc}</em>` },
+    { title: 'POURQUOI Y ALLER ?', content: choice1 },
+    { title: 'POURQUOI PAS ?', content: choice2 },
+    { title: 'LE VERDICT', content: '<strong>11/10 - INCROYABLE !</strong><br>🚀 On y va direct ! 🚀' }
+  ];
+}
+
+function renderShowcaseSlides() {
+  const container = document.getElementById('showcaseSlides');
+  container.innerHTML = showcaseData.map((s, i) => `
+    <div class="showcase-slide ${i === 0 ? 'active' : ''}">
+      <h2 class="showcase-title">${s.title}</h2>
+      <p class="showcase-content">${s.content}</p>
+    </div>
+  `).join('');
+}
+
+function updateShowcaseState() {
+  const slides = document.querySelectorAll('.showcase-slide');
+  slides.forEach((s, i) => s.classList.toggle('active', i === showcaseIdx));
+  
+  document.getElementById('showcasePrev').disabled = (showcaseIdx === 0);
+  document.getElementById('showcaseNext').textContent = (showcaseIdx === showcaseData.length - 1) ? 'Terminé ! 🏁' : 'Suivant ! 🚀';
+  document.getElementById('showcaseProgress').textContent = `${showcaseIdx + 1} / ${showcaseData.length}`;
+}
+
+function nextSlide() {
+  if (showcaseIdx < showcaseData.length - 1) {
+    showcaseIdx++;
+    updateShowcaseState();
+  } else {
+    closeOverlay('showcaseOverlay');
+  }
+}
+
+function prevSlide() {
+  if (showcaseIdx > 0) {
+    showcaseIdx--;
+    updateShowcaseState();
+  }
+}
+
+function setupShowcaseEvents() {
+  document.getElementById('showcaseClose').addEventListener('click', () => closeOverlay('showcaseOverlay'));
+  document.getElementById('showcaseNext').addEventListener('click', nextSlide);
+  document.getElementById('showcasePrev').addEventListener('click', prevSlide);
+  
+  document.getElementById('showcaseOverlay').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeOverlay('showcaseOverlay');
   });
 }
 
@@ -911,6 +942,7 @@ function setupEvents() {
 // ──────────────────────────────────────────────────────────────
 async function init() {
   setupEvents();
+  setupShowcaseEvents();
   loadWeather();
   updateCountdown();
   setInterval(updateCountdown, 60_000);
