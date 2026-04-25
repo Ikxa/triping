@@ -12,9 +12,17 @@ import { TRIP_DATE, GIST_ID, GITHUB_PAT, IMGBB_API_KEY } from './config.js';
 const PLACEHOLDER  = 'YOUR_';
 const STORAGE_KEY  = 'amsterdam-trip-v1';
 const VOTED_KEY    = 'amsterdam-voted-v1';
+const TOKEN_KEY    = 'amsterdam-gist-token'; // GitHub PAT stored locally per user
 const GIST_FILE    = 'data.json';
 const GIST_URL     = `https://api.github.com/gists/${GIST_ID}`;
-const AUTO_REFRESH = 45_000;
+const AUTO_REFRESH = 180_000; // 3 minutes pour économiser le quota (5000 req/h)
+
+// PAT helpers — stored in localStorage, never in source code
+function getToken() {
+  if (GITHUB_PAT && !GITHUB_PAT.startsWith(PLACEHOLDER)) return GITHUB_PAT;
+  return localStorage.getItem(TOKEN_KEY) || '';
+}
+function setToken(t) { localStorage.setItem(TOKEN_KEY, t.trim()); }
 
 const CATEGORIES = {
   bar:      { emoji: '🍺', label: 'Bar',        color: '#E8A838' },
@@ -52,17 +60,16 @@ let filter = { cat: 'all', status: 'all', search: '', sort: 'date-desc' };
 // GITHUB GIST API
 // ──────────────────────────────────────────────────────────────
 function isCloudConfigured() {
-  return (
-    GIST_ID    && !GIST_ID.startsWith(PLACEHOLDER) &&
-    GITHUB_PAT && !GITHUB_PAT.startsWith(PLACEHOLDER)
-  );
+  return GIST_ID && !GIST_ID.startsWith(PLACEHOLDER);
 }
 
-// Read — works without auth on a public gist
+// Read — uses auth if available to get 5000 req/hr limit instead of 60
 async function cloudGet() {
-  const res = await fetch(GIST_URL, {
-    headers: { 'Accept': 'application/vnd.github+json' },
-  });
+  const token = getToken();
+  const headers = { 'Accept': 'application/vnd.github+json' };
+  if (token) headers['Authorization'] = `token ${token}`;
+
+  const res = await fetch(GIST_URL, { headers });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.message || `GitHub Gist GET ${res.status}`);
@@ -75,11 +82,14 @@ async function cloudGet() {
 
 // Write — requires PAT with gist scope
 async function cloudPut(data) {
+  const token = getToken();
+  if (!token) throw new Error('no-token');
+
   const res = await fetch(GIST_URL, {
     method:  'PATCH',
     headers: {
       'Accept':        'application/vnd.github+json',
-      'Authorization': `token ${GITHUB_PAT}`,
+      'Authorization': `token ${token}`,
       'Content-Type':  'application/json',
     },
     body: JSON.stringify({
@@ -114,6 +124,10 @@ async function initStorage() {
     refreshTimer = setInterval(refresh, AUTO_REFRESH);
   } catch (err) {
     console.warn('[Amsterdam] GitHub Gist error, falling back to localStorage:', err);
+    if (err.message.includes('Bad credentials') || err.message.includes('401')) {
+      localStorage.removeItem(TOKEN_KEY);
+      openTokenModal();
+    }
     loadLocal();
     showSyncBadge('local');
     toast(`⚠️ Gist inaccessible (${err.message}) — mode local activé`, 'default', 5000);
@@ -532,6 +546,42 @@ function openOverlay(id)  { document.getElementById(id).classList.add('open'); }
 function closeOverlay(id) { document.getElementById(id).classList.remove('open'); }
 
 // ──────────────────────────────────────────────────────────────
+// MODAL : TOKEN (Rejoindre le board)
+// ──────────────────────────────────────────────────────────────
+function openTokenModal() {
+  document.getElementById('tokenInput').value = getToken();
+  document.getElementById('tokenError').style.display = 'none';
+  openOverlay('tokenOverlay');
+}
+
+async function saveToken() {
+  const val = document.getElementById('tokenInput').value.trim();
+  const err = document.getElementById('tokenError');
+  if (!val) { err.textContent = 'Entre un token valide.'; err.style.display = 'block'; return; }
+
+  // Quick validation — test a write to the gist
+  const btn = document.getElementById('tokenSave');
+  btn.disabled = true; btn.textContent = 'Vérification…';
+  try {
+    // Read current data first, then write it back with the new token
+    setToken(val);
+    const fresh = await cloudGet();
+    await cloudPut(fresh); // no-op write just to test auth
+    closeOverlay('tokenOverlay');
+    showSyncBadge('cloud');
+    toast('🔑 Token valide — tu peux écrire sur le board !', 'success', 3000);
+  } catch (e) {
+    localStorage.removeItem(TOKEN_KEY); // clear bad token
+    err.textContent = e.message.includes('Bad credentials') || e.message.includes('401')
+      ? 'Token incorrect ou expiré. Vérifie et réessaie.'
+      : `Erreur : ${e.message}`;
+    err.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Rejoindre ✓';
+  }
+}
+
+// ──────────────────────────────────────────────────────────────
 // PHOTO HANDLING — ImgBB + Canvas fallback
 // ──────────────────────────────────────────────────────────────
 function isImgBBConfigured() {
@@ -735,7 +785,13 @@ function setupEvents() {
       else           { await addItem(data);               toast('📌 Lieu ajouté !', 'success'); }
       closeOverlay('formOverlay');
     } catch (err) {
-      toast('❌ ' + err.message, 'error');
+      if (err.message === 'no-token') {
+        closeOverlay('formOverlay');
+        openTokenModal();
+        toast('🔑 Entre ton token pour écrire sur le board', 'default', 4000);
+      } else {
+        toast('❌ ' + err.message, 'error');
+      }
     } finally {
       btn.disabled = false;
       btn.textContent = editingId ? 'Enregistrer ✓' : 'Ajouter 📌';
@@ -823,10 +879,24 @@ function setupEvents() {
     searchTimer = setTimeout(() => { filter.search = e.target.value.trim(); renderAll(); }, 220);
   });
 
+  // Token modal
+  document.getElementById('tokenSave').addEventListener('click', saveToken);
+  document.getElementById('tokenSkip').addEventListener('click', () => {
+    closeOverlay('tokenOverlay');
+    showSyncBadge('readonly');
+  });
+  document.getElementById('tokenInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') saveToken();
+  });
+  // Sync badge click → re-open token modal
+  document.getElementById('syncIndicator').addEventListener('click', () => {
+    openTokenModal();
+  });
+
   // Escape
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
-    ['formOverlay', 'detailOverlay', 'confirmOverlay', 'showcaseOverlay'].forEach(id => {
+    ['formOverlay', 'detailOverlay', 'confirmOverlay', 'showcaseOverlay', 'tokenOverlay'].forEach(id => {
       if (document.getElementById(id).classList.contains('open')) closeOverlay(id);
     });
   });
