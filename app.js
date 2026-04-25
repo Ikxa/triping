@@ -4,7 +4,7 @@
 // ║     Photos: ImgBB (cloud) + base64 Canvas (fallback)        ║
 // ╚══════════════════════════════════════════════════════════════╝
 
-import { TRIP_DATE, GIST_ID, GITHUB_PAT, IMGBB_API_KEY } from './config.js';
+import { TRIP_DATE, GIST_ID, IMGBB_API_KEY } from './config.js';
 
 // ──────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -19,7 +19,6 @@ const AUTO_REFRESH = 180_000; // 3 minutes pour économiser le quota (5000 req/h
 
 // PAT helpers — stored in localStorage, never in source code
 function getToken() {
-  if (GITHUB_PAT && !GITHUB_PAT.startsWith(PLACEHOLDER)) return GITHUB_PAT;
   return localStorage.getItem(TOKEN_KEY) || '';
 }
 function setToken(t) { localStorage.setItem(TOKEN_KEY, t.trim()); }
