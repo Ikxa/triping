@@ -620,6 +620,18 @@ input, select, textarea { font-family: inherit; }
 .edit-btn:hover   { background: var(--clr-linen); border-color: var(--clr-brown-mid); }
 .delete-btn:hover { background: rgba(200,16,46,.08); border-color: rgba(200,16,46,.35); }
 
+.status-badge:disabled,
+.vote-btn:disabled,
+.magic-btn:disabled,
+.edit-btn:disabled,
+.delete-btn:disabled,
+.detail-vote-btn:disabled,
+.detail-edit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed !important;
+  pointer-events: none;
+}
+
 /* Status-based card dim */
 .card.status-skip { opacity: .6; }
 .card.status-done .card-photo img { filter: saturate(.6); }
@@ -1098,6 +1110,50 @@ input, select, textarea { font-family: inherit; }
 .confirm-msg  { font-family: 'Caveat', cursive; font-size: 1.5rem; font-weight: 700; margin-bottom: 4px; }
 .confirm-sub  { font-size: 13px; color: var(--clr-brown-soft); margin-bottom: 24px; }
 .modal-confirm .form-actions { justify-content: center; }
+
+/* Token help box */
+.token-help-box {
+  background: var(--clr-linen);
+  border: 1.5px solid var(--clr-kraft);
+  border-left: 4px solid var(--clr-gold);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  text-align: left;
+}
+.token-help-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--clr-brown);
+  margin-bottom: 8px;
+}
+.token-help-steps {
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 10px;
+}
+.token-help-steps li {
+  font-size: 13px;
+  color: var(--clr-brown-mid);
+  line-height: 1.4;
+}
+.token-help-note {
+  font-size: 11px;
+  color: var(--clr-brown-soft);
+  font-style: italic;
+}
+
+/* Subtitle contextuelle de la modale token */
+#tokenSubtitle {
+  font-size: 14px;
+  color: var(--clr-brown-mid);
+  line-height: 1.5;
+}
+#tokenSubtitle strong {
+  color: var(--clr-red);
+}
 
 /* ───────────────────────────────── TOAST */
 .toast-container {

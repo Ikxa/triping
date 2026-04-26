@@ -125,7 +125,7 @@ async function initStorage() {
     console.warn('[Amsterdam] GitHub Gist error, falling back to localStorage:', err);
     if (err.message.includes('Bad credentials') || err.message.includes('401')) {
       localStorage.removeItem(TOKEN_KEY);
-      openTokenModal();
+      openTokenModal('Ton token a expiré ou est invalide. <strong>Entre le nouveau token</strong> fourni par Jordan pour te reconnecter.');
     }
     loadLocal();
     showSyncBadge('local');
@@ -224,11 +224,11 @@ async function voteItem(id) {
   const hasVoted = voted.includes(id);
 
   if (hasVoted) {
-    localStorage.setItem(VOTED_KEY, JSON.stringify(voted.filter(v => v !== id)));
     await updateItem(id, { votes: Math.max(0, (item.votes || 0) - 1) });
+    localStorage.setItem(VOTED_KEY, JSON.stringify(voted.filter(v => v !== id)));
   } else {
-    localStorage.setItem(VOTED_KEY, JSON.stringify([...voted, id]));
     await updateItem(id, { votes: (item.votes || 0) + 1 });
+    localStorage.setItem(VOTED_KEY, JSON.stringify([...voted, id]));
   }
 }
 
@@ -400,9 +400,37 @@ function handleCardClick(e) {
   if (!card) return;
   const id = card.dataset.id;
 
-  if (action === 'vote')     { e.stopPropagation(); voteItem(id);      return; }
+  if (action === 'vote') { 
+    e.stopPropagation(); 
+    const btn = card.querySelector('.vote-btn');
+    if (btn) btn.disabled = true;
+    voteItem(id).catch(err => {
+      if (err.message === 'no-token') {
+        openTokenModal(`Tu veux voter pour <strong>${card.querySelector('.card-title')?.textContent || 'ce lieu'}</strong> ? Entre le token pour participer au board.`);
+      } else {
+        toast('❌ Erreur : ' + err.message, 'error');
+      }
+    }).finally(() => {
+      if (btn) btn.disabled = false;
+    });
+    return; 
+  }
   if (action === 'showcase') { e.stopPropagation(); openShowcase(id);   return; }
-  if (action === 'status')   { e.stopPropagation(); cycleStatus(id);   return; }
+  if (action === 'status') { 
+    e.stopPropagation(); 
+    const btn = card.querySelector('[data-action="status"]');
+    if (btn) btn.disabled = true;
+    cycleStatus(id).catch(err => {
+      if (err.message === 'no-token') {
+        openTokenModal(`Tu veux changer le statut de <strong>${card.querySelector('.card-title')?.textContent || 'ce lieu'}</strong> ? Entre le token pour modifier le board.`);
+      } else {
+        toast('❌ Erreur : ' + err.message, 'error');
+      }
+    }).finally(() => {
+      if (btn) btn.disabled = false;
+    });
+    return; 
+  }
   if (action === 'edit')     { e.stopPropagation(); openEditModal(id); return; }
   if (action === 'delete')   { e.stopPropagation(); openConfirm(id);   return; }
 
@@ -506,13 +534,24 @@ function openDetail(id) {
 }
 
 window.handleDetailVote = async function(id) {
-  await voteItem(id);
-  const item  = items.find(i => i.id === id);
-  const voted = getVoted();
-  const btn   = document.getElementById('detailVoteBtn');
-  if (btn && item) {
-    btn.textContent = `❤️ ${item.votes || 0} vote${(item.votes || 0) !== 1 ? 's' : ''}`;
-    btn.classList.toggle('voted', voted.includes(id));
+  const btn = document.getElementById('detailVoteBtn');
+  if (btn) btn.style.pointerEvents = 'none';
+  try {
+    await voteItem(id);
+    const item  = items.find(i => i.id === id);
+    const voted = getVoted();
+    if (btn && item) {
+      btn.textContent = `❤️ ${item.votes || 0} vote${(item.votes || 0) !== 1 ? 's' : ''}`;
+      btn.classList.toggle('voted', voted.includes(id));
+    }
+  } catch (err) {
+    if (err.message === 'no-token') {
+      openTokenModal(`Tu veux <strong>voter pour ce lieu</strong> ? Entre le token pour participer au board.`);
+    } else {
+      toast('❌ Erreur : ' + err.message, 'error');
+    }
+  } finally {
+    if (btn) btn.style.pointerEvents = 'auto';
   }
 };
 
@@ -535,9 +574,16 @@ function closeOverlay(id) { document.getElementById(id).classList.remove('open')
 // ──────────────────────────────────────────────────────────────
 // MODAL : TOKEN (Rejoindre le board)
 // ──────────────────────────────────────────────────────────────
-function openTokenModal() {
+function openTokenModal(reason = null) {
   document.getElementById('tokenInput').value = getToken();
   document.getElementById('tokenError').style.display = 'none';
+
+  const subtitle = document.getElementById('tokenSubtitle');
+  if (reason) {
+    subtitle.innerHTML = reason;
+  } else {
+    subtitle.textContent = 'Pour modifier le board, tu as besoin d\'un token d\'accès.';
+  }
   openOverlay('tokenOverlay');
 }
 
@@ -837,11 +883,22 @@ function setupEvents() {
     if (!deletingId) return;
     const btn = document.getElementById('confirmOk');
     btn.textContent = '…'; btn.disabled = true;
-    try { await deleteItem(deletingId); toast('🗑️ Supprimé'); }
-    catch (err) { toast('❌ ' + err.message, 'error'); }
-    finally { btn.textContent = 'Supprimer'; btn.disabled = false; }
-    deletingId = null;
-    closeOverlay('confirmOverlay');
+    try { 
+      await deleteItem(deletingId); 
+      toast('🗑️ Supprimé'); 
+      deletingId = null;
+      closeOverlay('confirmOverlay');
+    } catch (err) { 
+      if (err.message === 'no-token') {
+        closeOverlay('confirmOverlay');
+        openTokenModal('<strong>Pour supprimer un lieu</strong>, tu dois avoir les droits d\'écriture. Entre ton token d\'accès.');
+      } else {
+        toast('❌ ' + err.message, 'error');
+      }
+    } finally { 
+      btn.textContent = 'Supprimer'; 
+      btn.disabled = false; 
+    }
   });
 
   // Category filter
@@ -881,6 +938,7 @@ function setupEvents() {
   document.getElementById('tokenSkip').addEventListener('click', () => {
     closeOverlay('tokenOverlay');
     showSyncBadge('readonly');
+    toast('👁️ Mode lecture seule activé. Tu peux consulter le board sans rien modifier.', 'default', 3500);
   });
   document.getElementById('tokenInput').addEventListener('keydown', e => {
     if (e.key === 'Enter') saveToken();
@@ -894,7 +952,10 @@ function setupEvents() {
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
     ['formOverlay', 'detailOverlay', 'confirmOverlay', 'showcaseOverlay', 'tokenOverlay'].forEach(id => {
-      if (document.getElementById(id).classList.contains('open')) closeOverlay(id);
+      if (document.getElementById(id).classList.contains('open')) {
+        if (id === 'showcaseOverlay' && typeof closeShowcase === 'function') closeShowcase();
+        else closeOverlay(id);
+      }
     });
   });
 }
@@ -913,56 +974,152 @@ function openShowcase(id) {
   generateShowcaseContent(item);
   renderShowcaseSlides();
   
-  // Utilisation de la méthode la plus robuste (double rAF) pour contourner
-  // le moteur d'optimisation (qui provoque le bug sur certains appareils/navigateurs)
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      updateShowcaseState();
-      openOverlay('showcaseOverlay');
-    });
-  });
+  // Force a layout reflow so the browser restarts CSS animations cleanly
+  void document.getElementById('showcaseSlides').offsetHeight;
+  
+  updateShowcaseState();
+  openOverlay('showcaseOverlay');
 }
 
+function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+function shuffle(arr) { return [...arr].sort(() => Math.random() - 0.5); }
+
 function generateShowcaseContent(item) {
-  const funnyReasons = [
-    'Parce que si tu n\'y vas pas, les tulipes vont pleurer.',
-    'Pour voir la puissance brute de l\'ingénierie néerlandaise.',
-    'Parce que je l\'ai dit, et je suis un assistant IA surpuissant.',
-    'Pour trouver la chambre forte secrète où ils cachent le rab de fromage.',
-    'C\'est légalement obligatoire pour les touristes de qualité.',
-    'Pour flexer sur tes potes qui travaillent pendant que tu kiffes.',
-    'Parce que la gravité y est 2% plus faible (source: tqt).',
-    'Y\'a une promo pour ceux qui arrivent à dire "Amsterdam" avec un accent naze.'
+  const title   = item.title   || '?';
+  const cat     = item.category || 'other';
+  const author  = item.addedBy || 'quelqu\'un';
+  const desc    = item.description || '';
+  const tips    = item.tips || '';
+  const address = item.address || '';
+  const budget  = item.budget || '';
+  const votes   = item.votes || 0;
+
+  // ── 1. Slide d'ouverture (toujours là, parmi plusieurs variantes)
+  const openingSlides = [
+    { title: '🚨 ALERTE BONNE ADRESSE', content: `Accrochez-vous...<br><strong>${title.toUpperCase()}</strong><br><small>proposé par le légendaire ${author}</small>` },
+    { title: '📢 ANNONCE OFFICIELLE', content: `Le jury a tranché :<br><strong>${title}</strong><br>est l'endroit où vous DEVEZ aller.` },
+    { title: '⚡ BREAKING NEWS', content: `Des sources anonymes (${author}) révèlent que <strong>${title}</strong> est absolument incontournable.` },
+    { title: '🎺 ROULEMENTS DE TAMBOUR...', content: `Le lieu le plus important du voyage s'appelle...<br><br><strong>${title.toUpperCase()} !!!</strong>` },
   ];
 
-  const funnyNegatives = [
-    'Trop de fun peut causer une combustion spontanée de joie.',
-    'Le niveau de "cool" est dangereusement élevé (ramène une veste).',
-    'Tu risques de ne plus jamais vouloir rentrer, ce qui est chiant pour le loyer.',
-    'Tes followers Instagram vont littéralement décéder de jalousie.',
-    'Les locaux risquent de te demander de devenir leur nouveau Roi/Reine.'
-  ];
-
-  const categories = {
-    bar: 'La picole de qualité supérieure',
-    resto: 'La gastronomie qui rend fort',
-    culture: 'Le savoir ancestral et les vieux trucs',
-    nature: 'Le gazon maudit de la paix',
-    shopping: 'Le capitalisme en roue libre',
-    music: 'Le bruit qui fait bouger les épaules',
-    other: 'Le truc mystère du voyage'
+  // ── 2. Pool par catégorie
+  const catSlides = {
+    bar: [
+      { title: '🍺 EXPERTISE BRASSICOLE', content: `<strong>${title}</strong> — là où les bières néerlandaises te regardent avec respect.` },
+      { title: '🍻 ALERTE ALCOOL', content: `${title} c'est comme une pharmacie, mais les médicaments sont délicieux et font chanter.` },
+      { title: '🎯 LA MISSION', content: `Trouver une place à <strong>${title}</strong>, commander en premier, et prétendre connaître la bière locale depuis toujours.` },
+      { title: '🔬 ANALYSE CHIMIQUE', content: `Les chercheurs confirment : les bières de <strong>${title}</strong> contiennent 300% plus de bonne humeur que la moyenne.` },
+    ],
+    resto: [
+      { title: '🍽️ RAPPORT GASTRONOMIQUE', content: `<strong>${title}</strong> : l'endroit où on mange tellement bien qu'on réfléchit à s'expatrier.` },
+      { title: '👨‍🍳 ALERTE CULINAIRE', content: `La cuisine de <strong>${title}</strong> a été déclarée "arme de régal massif" par 3 experts anonymes.` },
+      { title: '🤌 LE VERDICT CULINAIRE', content: `${title} — si tu ne tries pas une photo de ton plat pour ta story, tu n'y étais pas.` },
+      { title: '🥇 CLASSEMENT MONDIAL', content: `<strong>${title}</strong> se classe #1 dans la catégorie "endroits où on mange bien à Amsterdam selon ${author}".` },
+    ],
+    culture: [
+      { title: '🏛️ ENRICHISSEMENT CULTUREL', content: `<strong>${title}</strong> va te faire paraître 40% plus intelligent en soirée. Garanti.` },
+      { title: '🎨 RAPPORT ARTISTIQUE', content: `Tu vas ressortir de <strong>${title}</strong> avec des opinions sur des trucs que tu n'avais jamais vus avant.` },
+      { title: '🧠 ALERTE SAVOIR', content: `<strong>${title}</strong> : là où les neurones font la fête. Apporte ton cerveau (et une bouteille d'eau).` },
+      { title: '📚 NIVEAU CULTUREL +1', content: `Après <strong>${title}</strong>, tu pourras enfin placer "Amsterdam" dans une conversation sans te la péter.` },
+    ],
+    nature: [
+      { title: '🌿 CONNEXION AVEC LA TERRE', content: `<strong>${title}</strong> — pour se rappeler que la nature existe entre deux cafés.` },
+      { title: '🌳 BULLETIN MÉTÉO INTÉRIEUR', content: `Prévisions : détente maximale à <strong>${title}</strong>, avec des éclaircies de sérénité.` },
+      { title: '🦆 RAPPORT FAUNE & FLORE', content: `<strong>${title}</strong> : les canards y sont en charge de la sécurité. Respectez la chaîne de commandement.` },
+      { title: '🍃 ORDONNANCE MÉDICALE', content: `Prescription du Dr. ${author} : 2h minimum à <strong>${title}</strong> pour guérir le stress du quotidien.` },
+    ],
+    shopping: [
+      { title: '🛍️ ALERTE ÉCONOMIQUE', content: `<strong>${title}</strong> : ton compte en banque sait déjà ce qui l'attend. Il a peur.` },
+      { title: '💳 RAPPORT FINANCIER', content: `Des études montrent que 100% des visiteurs de <strong>${title}</strong> repartent les sacs pleins et le portefeuille léger.` },
+      { title: '🏷️ PROTOCOLE ACHATS', content: `Règle n°1 à <strong>${title}</strong> : si tu as un doute, tu l'achètes. C'est pour le voyage.` },
+      { title: '📊 PRÉVISIONS BUDGÉTAIRES', content: `Entrée à <strong>${title}</strong> : gratuit.<br>Sortie sans rien acheter : statistiquement impossible.` },
+    ],
+    music: [
+      { title: '🎵 RAPPORT ACOUSTIQUE', content: `<strong>${title}</strong> : là où tes oreilles vont vivre leur meilleur moment de l'année.` },
+      { title: '🎧 ALERTE SONORE', content: `Les scientifiques confirment : danser à <strong>${title}</strong> brûle 3x plus de calories qu'à la salle de sport.` },
+      { title: '🕺 PROTOCOLE NIGHTLIFE', content: `Étape 1 : arriver à <strong>${title}</strong>. Étape 2 : bouger. Étape 3 : rater le dernier métro. Étape 4 : aucun regret.` },
+      { title: '🔊 NIVEAU SONORE', content: `<strong>${title}</strong> a été classé "dangereux pour la sobrié́té" par l'Agence Fictive des Nuits Hollandaises.` },
+    ],
+    other: [
+      { title: '💡 LE LIEU MYSTÉRIEUX', content: `<strong>${title}</strong> — personne ne sait exactement ce que c'est, mais tout le monde veut y aller.` },
+      { title: '🔮 L\'ORACLE A PARLÉ', content: `Les astres sont formels : <strong>${title}</strong> est une étape cosmiquement obligatoire de ce voyage.` },
+      { title: '🎲 BONUS SURPRISE', content: `${author} a ajouté <strong>${title}</strong> dans la liste. C'est surprenant. C'est donc excellent.` },
+    ],
   };
 
-  const choice1 = funnyReasons[Math.floor(Math.random() * funnyReasons.length)];
-  const choice2 = funnyNegatives[Math.floor(Math.random() * funnyNegatives.length)];
-  const catDesc = categories[item.category] || categories.other;
+  // ── 3. Slides contextuelles selon les données renseignées
+  const contextualPool = [];
+
+  if (desc) {
+    const shortDesc = desc.length > 100 ? desc.slice(0, 97) + '...' : desc;
+    contextualPool.push({ title: '🔎 LES FAITS BRUTS', content: `Ce que ${author} nous dit :<br><em>"${shortDesc}"</em>` });
+    contextualPool.push({ title: '📋 ANALYSE OFFICIELLE', content: `Après étude approfondie de la description, les experts concluent :<br><strong>Incontournable. On y va. Point.</strong>` });
+  }
+
+  if (tips) {
+    const shortTips = tips.length > 110 ? tips.slice(0, 107) + '...' : tips;
+    contextualPool.push({ title: '🤫 CONSEIL TOP SECRET', content: `${author} a glissé ce tip sous la table :<br><em>"${shortTips}"</em>` });
+    contextualPool.push({ title: '💡 ASTUCE DE NIVEAU EXPERT', content: `Insider tip (ne répète pas ça) :<br><em>"${shortTips}"</em>` });
+  }
+
+  if (address) {
+    contextualPool.push({ title: '📍 LA LOCALISATION', content: `Mission : rallier <strong>${address}</strong>.<br>Si tu te perds, c'est que tu n'avais pas assez bu.` });
+    contextualPool.push({ title: '🗺️ COORDONNÉES GPS', content: `L'objectif :<br><strong>${address}</strong><br><small>(les canaux sont normaux, ne panique pas)</small>` });
+  }
+
+  if (budget === 'free') {
+    contextualPool.push({ title: '🆓 ALERTE GRATUIT !!!', content: `<strong>${title}</strong> est GRATUIT.<br>L'argent économisé est juridiquement obligatoire d'être dépensé en bières.` });
+  } else if (budget === 'high') {
+    contextualPool.push({ title: '💎 AVERTISSEMENT FINANCIER', content: `<strong>${title}</strong> est dans la catégorie €€€.<br>Vends un rein si nécessaire. Ça vaut le coup.` });
+  } else if (budget === 'low') {
+    contextualPool.push({ title: '💶 RAPPORT BUDGÉTAIRE', content: `<strong>${title}</strong> : pas cher du tout.<br>Tu n'as littéralement aucune excuse pour ne pas y aller.` });
+  } else if (budget === 'mid') {
+    contextualPool.push({ title: '💰 BILAN FINANCIER', content: `<strong>${title}</strong> en €€ : raisonnable.<br>Ça rentre dans le budget si tu sautes un repas. Ça vaut le coup.` });
+  }
+
+  if (votes > 0) {
+    contextualPool.push({
+      title: `❤️ ${votes} VOTE${votes > 1 ? 'S' : ''} !`,
+      content: votes >= 3
+        ? `<strong>${votes} personnes</strong> ont voté pour <strong>${title}</strong>.<br>C'est démocratiquement incontournable. Vox populi.`
+        : `<strong>${votes} vote${votes > 1 ? 's' : ''}</strong> déjà pour ça.<br>Sois dans le bon camp de l'histoire.`
+    });
+  }
+
+  // ── 4. Une slide générique "pourquoi y aller" pour toujours avoir du contenu
+  const genericSlide = { title: 'POURQUOI Y ALLER ?', content: pick([
+    `Parce que les tulipes pleurent si tu passes à côté de <strong>${title}</strong>.`,
+    `Parce que ${author} dit que c'est bien, et ${author} a toujours raison.`,
+    `Pour pouvoir dire "J'y suis allé" avec un sourire supérieur.`,
+    'Pour flexer sur tes potes qui travaillent pendant que tu kiffes Amsterdam.',
+    'C\'est légalement obligatoire pour les touristes de qualité supérieure.',
+  ])};
+
+  // ── 5. Slide de verdict (toujours en dernier, parmi plusieurs variantes)
+  const verdictSlides = [
+    { title: '🏆 LE VERDICT FINAL', content: `<strong>11/10 — INCONTOURNABLE !</strong><br>🚀 On y va direct ! 🚀` },
+    { title: '⭐ CONCLUSION OFFICIELLE', content: `<strong>${title}</strong> a reçu la note de 11/10.<br>Le jury est unanime. Débat clos.` },
+    { title: '✅ DÉCISION PRISE', content: `<strong>${title}</strong> est dans le planning.<br>Qui n'est pas chaud assume les conséquences.` },
+    { title: '🎯 ORDRE DE MISSION', content: `Direction <strong>${title}</strong>.<br>C'est pas une suggestion. C'est la loi du voyage.` },
+    { title: '📜 DÉCRET OFFICIEL', content: `Par le présent décret,<br><strong>${title}</strong> est déclaré "MUST-DO".<br>Signé : ${author} & l'Univers.` },
+  ];
+
+  // ── Assemblage final : opening + shuffle(cat + contextual + generic) + verdict
+  const catPool  = shuffle(catSlides[cat] || catSlides.other);
+  const ctxPool  = shuffle(contextualPool);
+  const nbCat    = pick([1, 1, 2]);   // 1 ou 2 slides de catégorie
+  const nbCtx    = Math.min(ctxPool.length, pick([1, 2])); // 1 ou 2 contextuelles
+
+  const middle = shuffle([
+    ...catPool.slice(0, nbCat),
+    ...ctxPool.slice(0, nbCtx),
+    genericSlide,
+  ]);
 
   showcaseData = [
-    { title: 'ALERTE INFO', content: `Préparez-vous pour... <br><strong>${item.title.toUpperCase()}</strong>` },
-    { title: 'C\'EST QUOI ?', content: `Il paraît que c'est : <br><em>${catDesc}</em>` },
-    { title: 'POURQUOI Y ALLER ?', content: choice1 },
-    { title: 'POURQUOI PAS ?', content: choice2 },
-    { title: 'LE VERDICT', content: '<strong>11/10 - INCROYABLE !</strong><br>🚀 On y va direct ! 🚀' }
+    pick(openingSlides),
+    ...middle,
+    pick(verdictSlides),
   ];
 }
 
@@ -986,14 +1143,21 @@ function updateShowcaseState() {
   document.getElementById('showcaseProgress').textContent = `${showcaseIdx + 1} / ${showcaseData.length}`;
 }
 
+function closeShowcase() {
+  closeOverlay('showcaseOverlay');
+  setTimeout(() => { 
+    showcaseIdx = 0; 
+    const slides = document.querySelectorAll('.showcase-slide');
+    slides.forEach(s => s.classList.remove('active'));
+  }, 300);
+}
+
 function nextSlide() {
   if (showcaseIdx < showcaseData.length - 1) {
     showcaseIdx++;
     updateShowcaseState();
   } else {
-    closeOverlay('showcaseOverlay');
-    // Réinitialisation de sécurité pour ne pas casser le DOM s'il y a un décalage
-    setTimeout(() => { showcaseIdx = 0; updateShowcaseState(); }, 300);
+    closeShowcase();
   }
 }
 
@@ -1005,12 +1169,12 @@ function prevSlide() {
 }
 
 function setupShowcaseEvents() {
-  document.getElementById('showcaseClose').addEventListener('click', () => closeOverlay('showcaseOverlay'));
+  document.getElementById('showcaseClose').addEventListener('click', closeShowcase);
   document.getElementById('showcaseNext').addEventListener('click', nextSlide);
   document.getElementById('showcasePrev').addEventListener('click', prevSlide);
   
   document.getElementById('showcaseOverlay').addEventListener('click', e => {
-    if (e.target === e.currentTarget) closeOverlay('showcaseOverlay');
+    if (e.target === e.currentTarget) closeShowcase();
   });
 }
 

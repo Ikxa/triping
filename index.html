@@ -263,21 +263,33 @@
        MODAL : REJOINDRE LE BOARD (token GitHub)
   ══════════════════════════════════════════════════ -->
   <div class="overlay" id="tokenOverlay" role="dialog" aria-modal="true" aria-labelledby="tokenTitle">
-    <div class="modal modal-confirm" style="max-width:460px">
+    <div class="modal modal-confirm" style="max-width:500px">
       <div class="confirm-icon">🔑</div>
-      <h2 class="modal-title" id="tokenTitle" style="text-align:center;margin-bottom:4px">Rejoindre le board</h2>
-      <p class="confirm-sub" style="text-align:center;margin-bottom:20px">
-        Entre le token GitHub (fourni par Jordan) pour pouvoir ajouter et modifier des lieux.
+      <h2 class="modal-title" id="tokenTitle" style="text-align:center;margin-bottom:4px">Accès au board</h2>
+      <p class="confirm-sub" id="tokenSubtitle" style="text-align:center;margin-bottom:16px">
+        Pour modifier le board, tu as besoin d'un token d'accès.
       </p>
+
+      <!-- Aide contextuelle -->
+      <div class="token-help-box" id="tokenHelpBox">
+        <p class="token-help-title">📋 Comment obtenir ton token ?</p>
+        <ol class="token-help-steps">
+          <li>Demande le token à <strong>Jordan</strong> sur WhatsApp</li>
+          <li>Colle-le dans le champ ci-dessous</li>
+          <li>C'est tout ! Il sera mémorisé sur ton appareil 🎉</li>
+        </ol>
+        <p class="token-help-note">🔒 Ton token n'est stocké que sur <strong>ton appareil</strong>, jamais partagé.</p>
+      </div>
+
       <div class="form-group" style="margin-bottom:8px">
-        <label for="tokenInput">🔑 GitHub Token</label>
+        <label for="tokenInput">🔑 Token d'accès</label>
         <input type="password" id="tokenInput" placeholder="ghp_xxxxxxxxxxxxxxxx"
                autocomplete="off" style="font-family:monospace;letter-spacing:.05em">
-        <div class="field-hint">Token avec scope "gist" uniquement – ne donne accès à rien d'autre.</div>
+        <div class="field-hint">Token GitHub avec scope &laquo;&nbsp;gist&nbsp;&raquo; uniquement — n'accède à rien d'autre.</div>
       </div>
       <div class="form-actions" style="flex-direction:column;gap:8px">
-        <button class="btn-primary" id="tokenSave" style="width:100%">Rejoindre ✓</button>
-        <button class="btn-ghost"   id="tokenSkip" style="width:100%">Mode lecture seule</button>
+        <button class="btn-primary" id="tokenSave" style="width:100%">Valider l'accès ✓</button>
+        <button class="btn-ghost"   id="tokenSkip" style="width:100%">Continuer en lecture seule</button>
       </div>
       <p id="tokenError" style="color:#c8102e;font-size:12px;text-align:center;margin-top:8px;display:none"></p>
     </div>
